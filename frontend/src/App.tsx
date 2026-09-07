@@ -409,7 +409,7 @@ function App() {
         }
       />
 
-      <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+      <main className="mx-auto max-w-[1600px] px-5 py-5 sm:px-7 lg:px-10">
         {isLoading && (
           <div className="rounded-xl border border-slate-800 bg-slate-900 p-12 text-center">
             <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-2 border-slate-700 border-t-emerald-400" />

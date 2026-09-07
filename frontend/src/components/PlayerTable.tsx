@@ -1,24 +1,534 @@
+import { useState } from 'react';
+
 import {
-  ArrowUpDown,
   Bookmark,
-  Scale,
+  GitCompareArrows,
   UserRound,
+  ArrowDown,
+  ArrowUp,
+  ChevronsUpDown,
 } from 'lucide-react';
 
-import type { FilterState, Player } from '../types';
+import type {
+  FilterState,
+  Player,
+} from '../types';
+
 import { getCountryFlagUrl } from '../utils/flags';
-import { formatCurrency, getClubBadge } from '../utils/formatting';
+import { getClubBadge } from '../utils/formatting';
+
 
 interface PlayerTableProps {
   players: Player[];
   filters: FilterState;
-  onSort: (column: FilterState['sortBy']) => void;
-  onSelectPlayer: (player: Player) => void;
+
+  onSort: (
+    column: FilterState['sortBy']
+  ) => void;
+
+  onSelectPlayer: (
+    player: Player
+  ) => void;
+
   shortlistIds: string[];
   comparisonIds: string[];
-  onToggleShortlist: (player: Player) => void;
-  onToggleComparison: (player: Player) => void;
+
+  onToggleShortlist: (
+    player: Player
+  ) => void;
+
+  onToggleComparison: (
+    player: Player
+  ) => void;
 }
+
+
+function formatMarketValue(value: number) {
+  if (!value) {
+    return '—';
+  }
+
+  if (value >= 1_000_000) {
+    const millions =
+      value / 1_000_000;
+
+    return `€${
+      Number.isInteger(millions)
+        ? millions
+        : millions.toFixed(1)
+    }M`;
+  }
+
+  if (value >= 1_000) {
+    return `€${Math.round(
+      value / 1_000
+    )}K`;
+  }
+
+  return `€${value}`;
+}
+
+
+function formatLeagueName(
+  value: string
+) {
+  const knownNames: Record<
+    string,
+    string
+  > = {
+    'premier-league':
+      'Premier League',
+
+    laliga:
+      'LaLiga',
+
+    'serie-a':
+      'Serie A',
+
+    bundesliga:
+      'Bundesliga',
+
+    'ligue-1':
+      'Ligue 1',
+
+    eredivisie:
+      'Eredivisie',
+
+    'liga-portugal':
+      'Liga Portugal',
+
+    'super-lig':
+      'Süper Lig',
+
+    'scottish-premiership':
+      'Scottish Premiership',
+
+    superliga:
+      'Superliga',
+
+    'jupiler-pro-league':
+      'Jupiler Pro League',
+  };
+
+  return value
+    .split(',')
+    .map((league) => {
+      const clean =
+        league.trim();
+
+      if (knownNames[clean]) {
+        return knownNames[clean];
+      }
+
+      return clean
+        .split('-')
+        .map(
+          (word) =>
+            word.charAt(0).toUpperCase() +
+            word.slice(1)
+        )
+        .join(' ');
+    })
+    .join(', ');
+}
+
+
+function formatMetric(
+  value: number
+) {
+  return value.toFixed(2);
+}
+
+
+function SortIcon({
+  column,
+  filters,
+}: {
+  column:
+    FilterState['sortBy'];
+
+  filters: FilterState;
+}) {
+  if (
+    filters.sortBy !== column
+  ) {
+    return (
+      <ChevronsUpDown
+        size={11}
+        strokeWidth={1.7}
+        className="text-slate-700"
+      />
+    );
+  }
+
+  if (
+    filters.sortOrder === 'asc'
+  ) {
+    return (
+      <ArrowUp
+        size={11}
+        strokeWidth={2}
+        className="text-slate-400"
+      />
+    );
+  }
+
+  return (
+    <ArrowDown
+      size={11}
+      strokeWidth={2}
+      className="text-slate-400"
+    />
+  );
+}
+
+
+function SortableHeader({
+  label,
+  column,
+  filters,
+  onSort,
+}: {
+  label: string;
+
+  column:
+    FilterState['sortBy'];
+
+  filters: FilterState;
+
+  onSort: (
+    column:
+      FilterState['sortBy']
+  ) => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() =>
+        onSort(column)
+      }
+      className="ml-auto flex items-center gap-1 text-[10px] font-medium uppercase tracking-[0.07em] text-slate-600 transition hover:text-slate-400"
+    >
+      {label}
+
+      <SortIcon
+        column={column}
+        filters={filters}
+      />
+    </button>
+  );
+}
+
+
+function PlayerAvatar({
+  player,
+}: {
+  player: Player;
+}) {
+  const [failed, setFailed] =
+    useState(false);
+
+  return (
+    <div className="h-10 w-10 shrink-0 overflow-hidden rounded-md bg-white/[0.04]">
+      {!failed &&
+      player.image_url ? (
+        <img
+          src={player.image_url}
+          alt={player.name}
+          className="h-full w-full object-cover"
+          loading="lazy"
+          onError={() =>
+            setFailed(true)
+          }
+        />
+      ) : (
+        <div className="flex h-full w-full items-center justify-center text-slate-700">
+          <UserRound
+            size={18}
+            strokeWidth={1.5}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+function PlayerRow({
+  player,
+  isShortlisted,
+  isComparing,
+  onSelectPlayer,
+  onToggleShortlist,
+  onToggleComparison,
+}: {
+  player: Player;
+
+  isShortlisted: boolean;
+
+  isComparing: boolean;
+
+  onSelectPlayer: (
+    player: Player
+  ) => void;
+
+  onToggleShortlist: (
+    player: Player
+  ) => void;
+
+  onToggleComparison: (
+    player: Player
+  ) => void;
+}) {
+  const clubBadge =
+    getClubBadge(
+      player.current_club
+    );
+
+  const flagUrl =
+    getCountryFlagUrl(
+      player.country
+    );
+
+  const showSeasonClub =
+    player.season_clubs &&
+    player.season_clubs !==
+      player.current_club;
+
+  return (
+    <tr
+      tabIndex={0}
+      onClick={() =>
+        onSelectPlayer(player)
+      }
+      onKeyDown={(event) => {
+        if (
+          event.key === 'Enter'
+        ) {
+          onSelectPlayer(player);
+        }
+      }}
+      className="group cursor-pointer border-b border-white/[0.045] transition-colors hover:bg-white/[0.025] focus:bg-white/[0.025] focus:outline-none"
+    >
+      {/* Player */}
+      <td className="py-3 pl-4 pr-5">
+        <div className="flex items-center gap-3">
+          <PlayerAvatar
+            player={player}
+          />
+
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="truncate text-[13px] font-semibold tracking-[-0.01em] text-slate-100">
+                {player.name}
+              </span>
+
+              {flagUrl && (
+                <img
+                  src={flagUrl}
+                  alt={player.country}
+                  title={
+                    player.country
+                  }
+                  className="h-3 w-[18px] rounded-[2px] object-cover opacity-85"
+                />
+              )}
+            </div>
+
+            <div className="mt-0.5 truncate text-[10px] text-slate-600">
+              {
+                player.sub_position
+              }
+            </div>
+          </div>
+        </div>
+      </td>
+
+      {/* Age */}
+      <td className="px-3 py-3 text-right">
+        <span className="font-mono text-[12px] tabular-nums text-slate-400">
+          {player.age}
+        </span>
+      </td>
+
+      {/* Club */}
+      <td className="px-5 py-3">
+        <div className="flex items-center gap-2.5">
+          {clubBadge && (
+            <img
+              src={clubBadge}
+              alt=""
+              className="h-5 w-5 shrink-0 object-contain"
+              onError={(
+                event
+              ) => {
+                event.currentTarget.style.display =
+                  'none';
+              }}
+            />
+          )}
+
+          <div className="min-w-0">
+            <div className="truncate text-[12px] font-medium text-slate-300">
+              {
+                player.current_club
+              }
+            </div>
+
+            {showSeasonClub && (
+              <div className="mt-0.5 max-w-[180px] truncate text-[9px] text-slate-650">
+                Season:{' '}
+                {
+                  player.season_clubs
+                }
+              </div>
+            )}
+          </div>
+        </div>
+      </td>
+
+      {/* League */}
+      <td className="px-5 py-3">
+        <span className="text-[11px] text-slate-500">
+          {formatLeagueName(
+            player.leagues
+          )}
+        </span>
+      </td>
+
+      {/* Value */}
+      <td className="px-3 py-3 text-right">
+        <span className="font-mono text-[12px] font-semibold tabular-nums text-slate-200">
+          {formatMarketValue(
+            player.market_value
+          )}
+        </span>
+      </td>
+
+      {/* Minutes */}
+      <td className="px-3 py-3 text-right">
+        <span className="font-mono text-[11px] tabular-nums text-slate-500">
+          {player.minutes.toLocaleString()}
+        </span>
+      </td>
+
+      {/* Goals */}
+      <td className="px-3 py-3 text-right">
+        <span className="font-mono text-[11px] tabular-nums text-slate-400">
+          {player.goals}
+        </span>
+      </td>
+
+      {/* Assists */}
+      <td className="px-3 py-3 text-right">
+        <span className="font-mono text-[11px] tabular-nums text-slate-400">
+          {player.assists}
+        </span>
+      </td>
+
+      {/* G/90 */}
+      <td className="px-3 py-3 text-right">
+        <span className="font-mono text-[11px] tabular-nums text-slate-400">
+          {formatMetric(
+            player.g_90
+          )}
+        </span>
+      </td>
+
+      {/* A/90 */}
+      <td className="px-3 py-3 text-right">
+        <span className="font-mono text-[11px] tabular-nums text-slate-400">
+          {formatMetric(
+            player.a_90
+          )}
+        </span>
+      </td>
+
+      {/* GA / 90 */}
+      <td className="px-3 py-3 text-right">
+        <span className="font-mono text-[11px] font-semibold tabular-nums text-emerald-300">
+          {formatMetric(
+            player.ga_90
+          )}
+        </span>
+      </td>
+
+      {/* Actions */}
+      <td className="py-3 pl-4 pr-3">
+        <div
+          className={`flex justify-end gap-1 transition-opacity ${
+            isShortlisted ||
+            isComparing
+              ? 'opacity-100'
+              : 'opacity-25 group-hover:opacity-100'
+          }`}
+        >
+          <button
+            type="button"
+            title={
+              isShortlisted
+                ? 'Remove from shortlist'
+                : 'Add to shortlist'
+            }
+            onClick={(
+              event
+            ) => {
+              event.stopPropagation();
+
+              onToggleShortlist(
+                player
+              );
+            }}
+            className={`flex h-7 w-7 items-center justify-center rounded-md transition ${
+              isShortlisted
+                ? 'bg-emerald-400/10 text-emerald-300'
+                : 'text-slate-600 hover:bg-white/[0.05] hover:text-slate-300'
+            }`}
+          >
+            <Bookmark
+              size={13}
+              strokeWidth={1.8}
+              fill={
+                isShortlisted
+                  ? 'currentColor'
+                  : 'none'
+              }
+            />
+          </button>
+
+          <button
+            type="button"
+            title={
+              isComparing
+                ? 'Remove from comparison'
+                : 'Add to comparison'
+            }
+            onClick={(
+              event
+            ) => {
+              event.stopPropagation();
+
+              onToggleComparison(
+                player
+              );
+            }}
+            className={`flex h-7 w-7 items-center justify-center rounded-md transition ${
+              isComparing
+                ? 'bg-emerald-400/10 text-emerald-300'
+                : 'text-slate-600 hover:bg-white/[0.05] hover:text-slate-300'
+            }`}
+          >
+            <GitCompareArrows
+              size={13}
+              strokeWidth={1.8}
+            />
+          </button>
+        </div>
+      </td>
+    </tr>
+  );
+}
+
 
 export function PlayerTable({
   players,
@@ -30,250 +540,157 @@ export function PlayerTable({
   onToggleShortlist,
   onToggleComparison,
 }: PlayerTableProps) {
-  const SortButton = ({
-    column,
-    label,
-  }: {
-    column: FilterState['sortBy'];
-    label: string;
-  }) => (
-    <button
-      type="button"
-      onClick={() => onSort(column)}
-      className="inline-flex items-center gap-1 transition hover:text-white"
-    >
-      {label}
-      <ArrowUpDown
-        className={`h-3 w-3 ${
-          filters.sortBy === column
-            ? 'text-emerald-400'
-            : 'text-slate-600'
-        }`}
-      />
-    </button>
-  );
-
-  if (players.length === 0) {
-    return (
-      <div className="rounded-xl border border-slate-800 bg-slate-900 p-10 text-center">
-        <UserRound className="mx-auto mb-3 h-8 w-8 text-slate-600" />
-
-        <h3 className="text-sm font-semibold text-slate-300">
-          No players found
-        </h3>
-
-        <p className="mt-1 text-xs text-slate-500">
-          Adjust the scouting filters to expand the player pool.
-        </p>
-      </div>
-    );
-  }
-
   return (
-    <div className="overflow-hidden rounded-xl border border-slate-800 bg-slate-900 shadow-xl shadow-black/10">
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[1050px] text-left">
-          <thead className="border-b border-slate-800 bg-slate-950/80 text-[10px] uppercase tracking-wider text-slate-500">
-            <tr>
-              <th className="px-4 py-3">Player</th>
-              <th className="px-3 py-3">Age</th>
-              <th className="px-3 py-3">Club</th>
-              <th className="px-3 py-3">League</th>
+    <section>
+      {/* Database heading */}
+      <div className="mb-4 flex items-end justify-between">
+        <div>
+          <h2 className="text-[15px] font-semibold tracking-[-0.015em] text-slate-100">
+            Player Database
+          </h2>
 
-              <th className="px-3 py-3 text-right">
-                <SortButton column="market_value" label="Value" />
+          <p className="mt-1 text-[11px] text-slate-600">
+            <span className="font-mono text-slate-400">
+              {players.length.toLocaleString()}
+            </span>{' '}
+            players match your scouting criteria
+          </p>
+        </div>
+
+        <div className="hidden text-right sm:block">
+          <div className="text-[9px] font-medium uppercase tracking-[0.09em] text-slate-700">
+            Dataset
+          </div>
+
+          <div className="mt-1 font-mono text-[10px] text-slate-500">
+            Domestic leagues · 2025
+          </div>
+        </div>
+      </div>
+
+      {/* Table */}
+      <div className="overflow-x-auto border-y border-white/[0.06]">
+        <table className="w-full min-w-[1180px] border-collapse">
+          <thead>
+            <tr className="border-b border-white/[0.07]">
+              <th className="w-[270px] py-2.5 pl-4 pr-5 text-left text-[10px] font-medium uppercase tracking-[0.08em] text-slate-600">
+                Player
               </th>
 
-              <th className="px-3 py-3 text-right">
-                <SortButton column="minutes" label="Min" />
+              <th className="w-[60px] px-3 py-2.5 text-right text-[10px] font-medium uppercase tracking-[0.08em] text-slate-600">
+                Age
               </th>
 
-              <th className="px-3 py-3 text-right">
-                <SortButton column="goals" label="G" />
+              <th className="w-[220px] px-5 py-2.5 text-left text-[10px] font-medium uppercase tracking-[0.08em] text-slate-600">
+                Club
               </th>
 
-              <th className="px-3 py-3 text-right">
-                <SortButton column="assists" label="A" />
+              <th className="w-[175px] px-5 py-2.5 text-left text-[10px] font-medium uppercase tracking-[0.08em] text-slate-600">
+                League
               </th>
 
-              <th className="px-3 py-3 text-right">
-                <SortButton column="g_90" label="G/90" />
+              <th className="w-[105px] px-3 py-2.5 text-right">
+                <SortableHeader
+                  label="Value"
+                  column="market_value"
+                  filters={filters}
+                  onSort={onSort}
+                />
               </th>
 
-              <th className="px-3 py-3 text-right">
-                <SortButton column="a_90" label="A/90" />
+              <th className="w-[75px] px-3 py-2.5 text-right">
+                <SortableHeader
+                  label="Min"
+                  column="minutes"
+                  filters={filters}
+                  onSort={onSort}
+                />
               </th>
 
-              <th className="px-3 py-3 text-right">
-                <SortButton column="ga_90" label="G+A/90" />
+              <th className="w-[55px] px-3 py-2.5 text-right">
+                <SortableHeader
+                  label="G"
+                  column="goals"
+                  filters={filters}
+                  onSort={onSort}
+                />
               </th>
 
-              <th className="px-4 py-3 text-center">Actions</th>
+              <th className="w-[55px] px-3 py-2.5 text-right">
+                <SortableHeader
+                  label="A"
+                  column="assists"
+                  filters={filters}
+                  onSort={onSort}
+                />
+              </th>
+
+              <th className="w-[75px] px-3 py-2.5 text-right">
+                <SortableHeader
+                  label="G/90"
+                  column="g_90"
+                  filters={filters}
+                  onSort={onSort}
+                />
+              </th>
+
+              <th className="w-[75px] px-3 py-2.5 text-right">
+                <SortableHeader
+                  label="A/90"
+                  column="a_90"
+                  filters={filters}
+                  onSort={onSort}
+                />
+              </th>
+
+              <th className="w-[90px] px-3 py-2.5 text-right">
+                <SortableHeader
+                  label="G+A/90"
+                  column="ga_90"
+                  filters={filters}
+                  onSort={onSort}
+                />
+              </th>
+
+              <th className="w-[80px] py-2.5 pl-4 pr-3 text-right text-[10px] font-medium uppercase tracking-[0.08em] text-slate-600">
+                Actions
+              </th>
             </tr>
           </thead>
 
-          <tbody className="divide-y divide-slate-800/70">
-            {players.map((player) => {
-              const isShortlisted = shortlistIds.includes(player.id);
-              const isComparing = comparisonIds.includes(player.id);
-              const clubBadge =
-                player.club_logo || getClubBadge(player.current_club);
-
-              return (
-                <tr
+          <tbody>
+            {players.map(
+              (player) => (
+                <PlayerRow
                   key={player.id}
-                  onClick={() => onSelectPlayer(player)}
-                  className="cursor-pointer transition-colors hover:bg-slate-800/60"
-                >
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-3">
-                      <div className="h-11 w-11 flex-shrink-0 overflow-hidden rounded-lg border border-slate-700 bg-slate-800">
-                        {player.image_url ? (
-                          <img
-                            src={player.image_url}
-                            alt={player.name}
-                            className="h-full w-full object-cover"
-                            onError={(event) => {
-                                event.currentTarget.style.display = 'none';
-                            }}
-                          />
-                        ) : (
-                          <div className="flex h-full w-full items-center justify-center">
-                            <UserRound className="h-5 w-5 text-slate-500" />
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="truncate text-sm font-semibold text-slate-100">
-                            {player.name}
-                          </span>
-
-                          <img
-                            src={getCountryFlagUrl(player.country)}
-                            alt={player.country}
-                            title={player.country}
-                            className="h-3.5 w-5 rounded-sm object-cover"
-                          />
-                        </div>
-
-                        <span className="mt-0.5 block text-[11px] text-slate-500">
-                          {player.sub_position}
-                        </span>
-                      </div>
-                    </div>
-                  </td>
-
-                  <td className="px-3 py-3 text-xs text-slate-300">
-                    {player.age}
-                  </td>
-
-                  <td className="px-3 py-3">
-                    <div className="flex items-center gap-2">
-                      {clubBadge && (
-                        <img
-                          src={clubBadge}
-                          alt={player.current_club}
-                          className="h-6 w-6 object-contain"
-                        />
-                      )}
-
-                      <div>
-                        <div className="max-w-[150px] truncate text-xs font-medium text-slate-300">
-                          {player.current_club}
-                        </div>
-
-                        {player.season_clubs !== player.current_club && (
-                          <div
-                            className="max-w-[150px] truncate text-[10px] text-slate-500"
-                            title={player.season_clubs}
-                          >
-                            Season: {player.season_clubs}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </td>
-
-                  <td
-                    className="max-w-[130px] truncate px-3 py-3 text-xs text-slate-400"
-                    title={player.leagues}
-                  >
-                    {player.leagues}
-                  </td>
-
-                  <td className="px-3 py-3 text-right text-xs font-semibold text-emerald-300">
-                    {formatCurrency(player.market_value)}
-                  </td>
-
-                  <td className="px-3 py-3 text-right text-xs text-slate-300">
-                    {player.minutes.toLocaleString()}
-                  </td>
-
-                  <td className="px-3 py-3 text-right text-xs text-slate-300">
-                    {player.goals}
-                  </td>
-
-                  <td className="px-3 py-3 text-right text-xs text-slate-300">
-                    {player.assists}
-                  </td>
-
-                  <td className="px-3 py-3 text-right text-xs text-slate-300">
-                    {player.g_90.toFixed(2)}
-                  </td>
-
-                  <td className="px-3 py-3 text-right text-xs text-slate-300">
-                    {player.a_90.toFixed(2)}
-                  </td>
-
-                  <td className="px-3 py-3 text-right">
-                    <span className="rounded-md border border-emerald-500/20 bg-emerald-500/10 px-2 py-1 text-xs font-bold text-emerald-300">
-                      {player.ga_90.toFixed(2)}
-                    </span>
-                  </td>
-
-                  <td className="px-4 py-3">
-                    <div
-                      className="flex justify-center gap-1"
-                      onClick={(event) => event.stopPropagation()}
-                    >
-                      <button
-                        type="button"
-                        title="Add to shortlist"
-                        onClick={() => onToggleShortlist(player)}
-                        className={`rounded-lg border p-1.5 transition ${
-                          isShortlisted
-                            ? 'border-amber-500/40 bg-amber-500/20 text-amber-300'
-                            : 'border-slate-700 bg-slate-800 text-slate-500 hover:text-amber-300'
-                        }`}
-                      >
-                        <Bookmark
-                          className="h-3.5 w-3.5"
-                          fill={isShortlisted ? 'currentColor' : 'none'}
-                        />
-                      </button>
-
-                      <button
-                        type="button"
-                        title="Compare player"
-                        onClick={() => onToggleComparison(player)}
-                        className={`rounded-lg border p-1.5 transition ${
-                          isComparing
-                            ? 'border-indigo-500/40 bg-indigo-500/20 text-indigo-300'
-                            : 'border-slate-700 bg-slate-800 text-slate-500 hover:text-indigo-300'
-                        }`}
-                      >
-                        <Scale className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
+                  player={player}
+                  isShortlisted={shortlistIds.includes(
+                    player.id
+                  )}
+                  isComparing={comparisonIds.includes(
+                    player.id
+                  )}
+                  onSelectPlayer={onSelectPlayer}
+                  onToggleShortlist={onToggleShortlist}
+                  onToggleComparison={onToggleComparison}
+                />
+              )
+            )}
           </tbody>
         </table>
       </div>
-    </div>
+
+      {players.length === 0 && (
+        <div className="py-20 text-center">
+          <div className="text-sm font-medium text-slate-400">
+            No players found
+          </div>
+
+          <div className="mt-1 text-xs text-slate-600">
+            Adjust the scouting filters to widen the player pool.
+          </div>
+        </div>
+      )}
+    </section>
   );
 }
